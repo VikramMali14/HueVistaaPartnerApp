@@ -1,0 +1,63 @@
+import { addItem, AREAS, listingBody, listingNeeds, ownPhotoUrl, rupees, SPECIALTIES, tradeBody, wholeNumber } from "../listing";
+
+const profile = { latitude: 19.07, longitude: 72.88, phoneVerified: true, phone: "+919876543210" };
+
+describe("listing (P5)", () => {
+  // The PIN code is the whole of where: the server makes the middle of it the painter's location.
+  it("sends the PIN code, and nothing else about where", () => {
+    expect(listingBody(true, { pincode: "307026", place: "Abu Road, Sirohi, Rajasthan" })).toEqual({
+      listedForCustomers: true,
+      pincode: "307026",
+    });
+  });
+
+  // Customers see only the painter's card (name, photo, address), so no line about them goes.
+  it("sends nothing about the painter, and clears the location only when asked", () => {
+    expect(listingBody(false, null)).toEqual({ listedForCustomers: false });
+    expect(listingBody(false, "clear")).toEqual({ listedForCustomers: false, clearLocation: true });
+  });
+
+  it("addresses the painter's own photo by its version", () => {
+    expect(ownPhotoUrl("1730000000000")).toBe("/api/painters/me/photo?v=1730000000000");
+    expect(ownPhotoUrl(null)).toBeNull();
+  });
+
+  it("needs a PIN code and a confirmed mobile", () => {
+    expect(listingNeeds(profile, null)).toEqual({ location: true, mobile: true, ready: true });
+    expect(listingNeeds(profile, "clear").ready).toBe(false);
+    expect(listingNeeds({ ...profile, latitude: null, longitude: null }, null).location).toBe(false);
+    expect(listingNeeds({ ...profile, latitude: null, longitude: null }, { pincode: "307026", place: "Abu Road" }).location).toBe(true);
+    expect(listingNeeds({ ...profile, phoneVerified: false }, null)).toEqual({ location: true, mobile: false, ready: false });
+  });
+});
+
+describe("trade profile (P12)", () => {
+  it("adds an item tidied, never twice, within the server's limits", () => {
+    expect(addItem(["Thane"], "  Navi   Mumbai ", AREAS)).toEqual({ list: ["Thane", "Navi Mumbai"], problem: null });
+    expect(addItem(["Thane"], "THANE", AREAS)).toEqual({ list: ["Thane"], problem: null });
+    expect(addItem([], "   ", AREAS)).toEqual({ list: [], problem: null });
+    expect(addItem([], "x".repeat(41), SPECIALTIES).problem).toBe("tooLong");
+    const full = Array.from({ length: 12 }, (_, i) => `S${i}`);
+    expect(addItem(full, "One more", SPECIALTIES)).toEqual({ list: full, problem: "tooMany" });
+  });
+
+  it("reads a whole number, empty as none, anything else as wrong", () => {
+    expect(wholeNumber(" 12 ")).toBe(12);
+    expect(wholeNumber("")).toBeNull();
+    expect(wholeNumber("1.5")).toBeUndefined();
+    expect(wholeNumber("-3")).toBeUndefined();
+    expect(wholeNumber("12a")).toBeUndefined();
+  });
+
+  // The PUT never stores a phone, and an emptied field is cleared with null or [].
+  it("sends the trade fields, never a phone", () => {
+    const body = tradeBody({ areas: [" Thane ", ""], specialties: [], years: null, dayRate: 1500 });
+    expect(body).toEqual({ serviceAreas: ["Thane"], specialties: [], yearsExperience: null, dayRateInr: 1500 });
+    expect(body).not.toHaveProperty("phone");
+  });
+
+  it("prints a day rate in rupees", () => {
+    expect(rupees(150000)).toBe("₹1,50,000");
+    expect(rupees(null)).toBe("—");
+  });
+});
