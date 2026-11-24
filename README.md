@@ -28,7 +28,8 @@ has every screen, and [docs/design.md](docs/design.md) has the design.
 The other apps:
 
 - **HueVistaa Staff**, for the people at a shop's counter.
-- **HueVistaa**, for homeowners.
+- **HueVistaa**, for homeowners. It is homeowners-only: a painter or a shop signing in there is
+  sent here (VikramMali14/HuevistaaMobile#53).
 
 All three talk to the same backend (`api.huevistaa.com`).
 
@@ -81,6 +82,12 @@ The rules are the same as on the partner website:
   - An admin or a distributor: the website.
 
 The rule lives in one place, `src/auth/sides.ts`.
+
+A link that arrives while nobody is signed in is kept through the sign-in
+(`src/auth/pending-route.ts`, as in the HueVistaa app). That is how the HueVistaa app hands a
+painter over: its board links open `huevistaapartner://painter/claim/{token}`, and the board's
+claim is still there once the painter has signed in. Not after a sign-out by choice, since
+whoever signs in next may be someone else.
 
 ## The backend it uses
 

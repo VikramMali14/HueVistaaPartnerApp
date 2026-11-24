@@ -7,6 +7,7 @@ import { tokens } from "@/api/instance";
 import { queryClient } from "@/api/query-client";
 import type { AuthResponse, UserProfile } from "@/api/types";
 
+import { forgetRememberedRoute } from "./pending-route";
 import { partnerSide, type Side } from "./sides";
 
 /** The profile is not secret; it is cached so the app can open with no connection. */
@@ -18,7 +19,8 @@ export type SessionState =
   | { status: "loading" }
   /** Tokens exist but the server can't be reached and nothing is cached. */
   | { status: "unreachable" }
-  | { status: "signedOut" }
+  /** `byChoice`: the person signed out themselves, so no page is remembered for the next one. */
+  | { status: "signedOut"; byChoice?: boolean }
   | { status: "signedIn"; profile: UserProfile };
 
 /**
@@ -91,10 +93,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     signedInId.current = state.status === "signedIn" ? state.profile.id : null;
   }, [state]);
 
-  const forget = useCallback(async () => {
+  const forget = useCallback(async (byChoice = false) => {
+    if (byChoice) forgetRememberedRoute();
     await tokens.clear();
     await forgetAccountData();
-    setState({ status: "signedOut" });
+    setState({ status: "signedOut", byChoice });
   }, []);
 
   const applyProfile = useCallback(async (profile: UserProfile) => {
@@ -182,7 +185,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
       async signOut() {
         if (tokens.hasSession()) await endOnServer();
-        await forget();
+        await forget(true);
       },
 
       retry() {

@@ -107,6 +107,7 @@ jest.mock("@/features/painter/board-reader/BoardReader", () => {
 const mockAuth = {
   profile: jest.fn<Promise<UserProfile>, []>(),
   logout: jest.fn(async () => undefined),
+  login: jest.fn(),
 };
 jest.mock("@/api/endpoints/auth", () => ({ authApi: mockAuth }));
 const mockRewards = {
@@ -439,6 +440,24 @@ describe("P3 · Scan", () => {
 // ── P6 · Claim a board ────────────────────────────────────────────────────────
 
 describe("P6 · Claim a board", () => {
+  // HueVistaa (the homeowners' app) hands a painter here at a board's claim
+  // (huevistaapartner://painter/claim/{token}). Signed out, the board waits through the sign-in.
+  it("opens a board's claim after signing in, when its link arrived while signed out", async () => {
+    for (const key of Object.keys(mockSecure)) delete mockSecure[key];
+    renderRouter("./app", { initialUrl: `/painter/claim/${TOKEN}` });
+    await waitFor(() => expect(screen).toHavePathname("/welcome"));
+
+    mockAuth.login.mockResolvedValue({ accessToken: "access-1", refreshToken: "refresh-1" });
+    fireEvent.press(screen.getByTestId("welcome-email"));
+    await waitFor(() => expect(screen.getByTestId("email-input")).toBeTruthy());
+    fireEvent.changeText(screen.getByTestId("email-input"), "ravi@example.com");
+    fireEvent.changeText(screen.getByTestId("password-input"), "secret123");
+    fireEvent.press(screen.getByTestId("email-submit"));
+
+    await waitFor(() => expect(screen).toHavePathname(`/painter/claim/${TOKEN}`));
+    await waitFor(() => expect(screen.getByText("This board is worth 25 points to you.")).toBeTruthy());
+  });
+
   it("says what the board is worth, claims it and counts it in", async () => {
     mockRewards.claim.mockResolvedValue({ projectId: "p1", role: "PAINTER", pointsAwarded: 25, balance: 1275, claimedAt: ist(0) });
     renderRouter("./app", { initialUrl: `/painter/claim/${TOKEN}` });
