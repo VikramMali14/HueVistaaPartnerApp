@@ -24,8 +24,8 @@ export type SessionState =
 /**
  * A sign-in that worked, for an account the partner app has nothing for: somebody at a shop's
  * counter (the HueVistaa Staff app is theirs), a homeowner (the HueVistaa app), an admin or a
- * distributor (the website). Nothing is kept — the session is ended on the server and the phone —
- * and the screen says where they belong.
+ * distributor (the website). Nothing is kept on the phone, the account's other sessions are left
+ * alone, and the screen says where they belong.
  */
 export class NotPartnerError extends Error {
   readonly side: Exclude<Side, "shop" | "painter">;
@@ -42,7 +42,7 @@ export interface SessionValue {
   profile: UserProfile | null;
   /**
    * Save the tokens from a sign-in answer and load the profile. Throws {@link NotPartnerError}
-   * for an account that is neither a shop nor a painter, after ending that session.
+   * for an account that is neither a shop nor a painter, keeping none of it.
    */
   completeSignIn(response: AuthResponse): Promise<UserProfile>;
   /** Read the profile again. */
@@ -157,7 +157,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         }
         const side = partnerSide(profile);
         if (side !== "shop" && side !== "painter") {
-          await endOnServer();
+          // Dropped, not ended on the server: the backend's logout ends EVERY session the account
+          // has — a homeowner's HueVistaa app, an employee's staff app — so a sign-in this app
+          // refuses is simply never kept, and its tokens lapse unused.
           await tokens.clear();
           throw new NotPartnerError(side);
         }

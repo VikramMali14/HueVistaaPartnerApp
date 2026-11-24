@@ -281,7 +281,8 @@ describe("signing in", () => {
     fireEvent.changeText(screen.getByTestId("code-input"), "123456");
     await waitFor(() => expect(screen.getByTestId("code-refused")).toBeTruthy());
     expect(screen.getByText(/Staff use the HueVistaa Staff app/)).toBeTruthy();
-    expect(mockAuth.logout).toHaveBeenCalled();
+    // The backend's logout would end every session the employee has — their staff app too.
+    expect(mockAuth.logout).not.toHaveBeenCalled();
     expect(mockSecure["hvp.refresh"]).toBeUndefined();
   });
 

@@ -73,8 +73,9 @@ The rules are the same as on the partner website:
   - A number with no shop or painter behind it opens nothing (`shopSignupRequired`). The app offers
     the shop's free trial and joining as a painter, both on the website.
 - **Email and password:** the same, with the same emailed code for a shop on a new phone.
-- **Not a shop or a painter:** the account is signed straight back out, with a note on where it
-  belongs.
+- **Not a shop or a painter:** nothing of the sign-in is kept, and the app says where the account
+  belongs. It is not ended on the server, because the backend's logout ends every session the
+  account has, and their own app should stay signed in.
   - Somebody at a shop's counter: HueVistaa Staff.
   - A homeowner: HueVistaa.
   - An admin or a distributor: the website.
