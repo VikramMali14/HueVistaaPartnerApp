@@ -7,6 +7,8 @@ import { tokens } from "@/api/instance";
 import { queryClient } from "@/api/query-client";
 import type { AuthResponse, UserProfile } from "@/api/types";
 
+import { deviceToken, keepDeviceToken } from "@/features/auth/device";
+
 import { forgetRememberedRoute } from "./pending-route";
 import { partnerSide, type Side } from "./sides";
 
@@ -29,6 +31,27 @@ export type SessionState =
  * distributor (the website). Nothing is kept on the phone, the account's other sessions are left
  * alone, and the screen says where they belong.
  */
+/**
+ * A switch into a shop, or a sign-in that goes on into one of the person's shops, that waits on the
+ * shop's emailed code: the challenge to finish it with, and where the code went (masked).
+ */
+export class EmailCodeNeededError extends Error {
+  readonly challenge: string;
+  readonly hint: string;
+  constructor(challenge: string, hint: string) {
+    super("The shop's emailed code is needed first");
+    this.name = "EmailCodeNeededError";
+    this.challenge = challenge;
+    this.hint = hint;
+  }
+}
+
+/** What switching to another side came to. */
+export type SwitchOutcome =
+  | { kind: "switched"; profile: UserProfile }
+  /** A shop on a phone that hasn't confirmed its emailed code lately: finish with confirmSwitch(). */
+  | { kind: "emailCode"; challenge: string; hint: string };
+
 export class NotPartnerError extends Error {
   readonly side: Exclude<Side, "shop" | "painter">;
   constructor(side: Exclude<Side, "shop" | "painter">) {
@@ -51,6 +74,14 @@ export interface SessionValue {
   refreshProfile(): Promise<UserProfile | null>;
   /** Use a profile the server just returned (a new name, a confirmed number) without another fetch. */
   updateProfile(profile: UserProfile): Promise<void>;
+  /**
+   * Continue as another of the person's sides — a shop, their painter work, another shop — without
+   * signing in again. A shop may first need its emailed code: then the session is left as it is and
+   * the answer says so, to be finished with {@link confirmSwitch}.
+   */
+  switchTo(sideId: string): Promise<SwitchOutcome>;
+  /** Finish a switch into a shop with the code it emailed. */
+  confirmSwitch(challenge: string, code: string): Promise<UserProfile>;
   /** Sign out on this phone, telling the server when it can be reached. */
   signOut(): Promise<void>;
   /** Try the start-up restore again (from the "can't reach" state). */
@@ -138,37 +169,84 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   // The backend refused the refresh token mid-session.
   useEffect(() => tokens.onSessionEnded(() => void forget()), [forget]);
 
+  const completeSignIn = useCallback(async function completeSignIn(response: AuthResponse): Promise<UserProfile> {
+    // An admin's emailed code never reaches here: the screens send admins to the website.
+    if (response.twoFactorRequired) throw new NotPartnerError("other");
+    if (!response.accessToken || !response.refreshToken) {
+      throw new Error("completeSignIn() needs an answer that carries tokens");
+    }
+    await tokens.setTokens({ accessToken: response.accessToken, refreshToken: response.refreshToken });
+    let profile: UserProfile;
+    try {
+      profile = await authApi.profile();
+    } catch (err) {
+      // Never leave tokens saved behind a screen that says "signed out".
+      await tokens.clear();
+      throw err;
+    }
+    const side = partnerSide(profile);
+    if (side !== "shop" && side !== "painter") {
+      // Somebody whose own sign-in isn't a shop's or a painter's — a customer whose shop the team
+      // added to their account — goes on into that shop (or their painter work) here.
+      const partner = (profile.sides ?? []).find(
+        (other) => !other.current && (other.kind === "SHOP" || other.kind === "PAINTER"),
+      );
+      if (partner) {
+        let switched: AuthResponse;
+        try {
+          switched = await authApi.switchProfile({
+            to: partner.id,
+            deviceToken: await deviceToken(),
+            refreshToken: response.refreshToken,
+          });
+        } catch (err) {
+          await tokens.clear();
+          throw err;
+        }
+        if (switched.emailCodeRequired && switched.challengeToken) {
+          await tokens.clear();
+          throw new EmailCodeNeededError(switched.challengeToken, switched.emailHint ?? "");
+        }
+        return completeSignIn(switched);
+      }
+      // Dropped, not ended on the server: the backend's logout ends EVERY session the account
+      // has — a homeowner's HueVistaa app, an employee's staff app — so a sign-in this app
+      // refuses is simply never kept, and its tokens lapse unused.
+      await tokens.clear();
+      throw new NotPartnerError(side);
+    }
+    // Another account than the one on screen — a switch to another side of the person: nothing the
+    // last one loaded (a shop's staff, a painter's points) may show under the new one.
+    if (signedInId.current && signedInId.current !== profile.id) queryClient.clear();
+    await cacheProfile(profile);
+    signedInId.current = profile.id;
+    setState({ status: "signedIn", profile });
+    return profile;
+  }, []);
+
   const value = useMemo<SessionValue>(
     () => ({
       state,
       profile: state.status === "signedIn" ? state.profile : null,
 
-      async completeSignIn(response) {
-        // An admin's emailed code never reaches here: the screens send admins to the website.
-        if (response.twoFactorRequired) throw new NotPartnerError("other");
-        if (!response.accessToken || !response.refreshToken) {
-          throw new Error("completeSignIn() needs an answer that carries tokens");
+      completeSignIn,
+
+      async switchTo(sideId) {
+        const response = await authApi.switchProfile({
+          to: sideId,
+          deviceToken: await deviceToken(),
+          refreshToken: tokens.refreshToken ?? undefined,
+        });
+        if (response.emailCodeRequired && response.challengeToken) {
+          return { kind: "emailCode", challenge: response.challengeToken, hint: response.emailHint ?? "" };
         }
-        await tokens.setTokens({ accessToken: response.accessToken, refreshToken: response.refreshToken });
-        let profile: UserProfile;
-        try {
-          profile = await authApi.profile();
-        } catch (err) {
-          // Never leave tokens saved behind a screen that says "signed out".
-          await tokens.clear();
-          throw err;
-        }
-        const side = partnerSide(profile);
-        if (side !== "shop" && side !== "painter") {
-          // Dropped, not ended on the server: the backend's logout ends EVERY session the account
-          // has — a homeowner's HueVistaa app, an employee's staff app — so a sign-in this app
-          // refuses is simply never kept, and its tokens lapse unused.
-          await tokens.clear();
-          throw new NotPartnerError(side);
-        }
-        await cacheProfile(profile);
-        setState({ status: "signedIn", profile });
-        return profile;
+        return { kind: "switched", profile: await completeSignIn(response) };
+      },
+
+      async confirmSwitch(challenge, code) {
+        const response = await authApi.shopEmailCode({ challengeToken: challenge, code });
+        await keepDeviceToken(response);
+        return completeSignIn(response);
       },
 
       async refreshProfile() {
@@ -193,7 +271,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setAttempt((n) => n + 1);
       },
     }),
-    [state, forget, applyProfile],
+    [state, forget, applyProfile, completeSignIn],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

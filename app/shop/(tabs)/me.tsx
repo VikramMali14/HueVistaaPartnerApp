@@ -4,6 +4,7 @@ import { StyleSheet, View } from "react-native";
 import { useSession } from "@/auth/session";
 import { Avatar, ListGroup, ListRow, Screen, ScreenHeader, Text } from "@/components/ui";
 import { useShop } from "@/features/shop/ShopContext";
+import { SwitchSides } from "@/features/auth/SwitchSides";
 import { SettingsBody } from "@/features/settings/SettingsBody";
 import { t } from "@/i18n";
 import { openWebPage, webPages } from "@/lib/open-web";
@@ -69,6 +70,9 @@ export default function ShopMe() {
           ))}
         </View>
       ) : null}
+
+      {/* Their other work: another shop of theirs, their painter work — or starting it. */}
+      <SwitchSides />
 
       <ListGroup>
         <ListRow

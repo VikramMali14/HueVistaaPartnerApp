@@ -36,6 +36,15 @@ export const authApi = {
 
   profile: () => api.request<UserProfile>("api/auth/profile"),
 
+  /**
+   * Continue as another of the person's sides — a shop, their painter work, another shop: `to` is a
+   * side's id from the profile's `sides`. Into a shop on a phone that hasn't confirmed its emailed
+   * code in thirty days, the answer is `emailCodeRequired` and a challenge, finished with
+   * {@link shopEmailCode}. `refreshToken` is the one being left, which the backend ends.
+   */
+  switchProfile: (body: { to: string; deviceToken?: string; refreshToken?: string }) =>
+    api.request<AuthResponse>("api/auth/profiles/switch", { body }),
+
   updateProfile: (body: { name: string }) => api.request<UserProfile>("api/auth/profile", { method: "PATCH", body }),
 
   /** Confirming the account's mobile number: a code texted to it (or to a new number). */

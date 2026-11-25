@@ -1,4 +1,4 @@
-import { homeFor, partnerSide } from "../sides";
+import { homeFor, otherPartnerSides, partnerSide } from "../sides";
 
 describe("which side an account opens on", () => {
   it("opens a shop's login on the shop's side, and a painter's on the painter's", () => {
@@ -15,9 +15,22 @@ describe("which side an account opens on", () => {
     expect(homeFor({ role: "CUSTOMER" })).toBe("/not-partner");
   });
 
-  // A shop's or a painter's customer profile is somebody's second side, never a partner.
-  it("counts a linked customer profile as a customer, whatever its role says", () => {
-    expect(partnerSide({ role: "RETAILER", linkedProfile: true })).toBe("customer");
+  // A side of somebody's sign-in counts by its role: a shop owner's painter side is painter work, a
+  // painter's counter or an owner's second branch is a shop, and only their own home is a customer's.
+  it("counts a linked side by its role, and only a linked customer profile as a customer", () => {
+    expect(partnerSide({ role: "CUSTOMER", linkedProfile: true })).toBe("customer");
+    expect(partnerSide({ role: "RETAILER", linkedProfile: true })).toBe("shop");
+    expect(partnerSide({ role: "PAINTER", linkedProfile: true })).toBe("painter");
+    expect(partnerSide({ role: "DISTRIBUTOR", linkedProfile: true })).toBe("other");
+  });
+
+  it("offers the person's other shops and painter work, never the side this session is", () => {
+    const side = (id: string, kind: "SHOP" | "PAINTER" | "CUSTOMER" | "DISTRIBUTOR", current = false) => ({
+      id, kind, role: kind === "SHOP" ? ("RETAILER" as const) : kind, label: id, current, main: false, needsCode: kind === "SHOP",
+    });
+    const sides = [side("a", "SHOP", true), side("b", "PAINTER"), side("c", "CUSTOMER"), side("d", "SHOP"), side("e", "DISTRIBUTOR")];
+    expect(otherPartnerSides({ sides }).map((s) => s.id)).toEqual(["b", "d"]);
+    expect(otherPartnerSides({})).toEqual([]);
   });
 
   it("leaves admins and distributors to the website", () => {
