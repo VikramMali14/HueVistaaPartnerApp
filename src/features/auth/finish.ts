@@ -2,7 +2,7 @@ import { useRouter } from "expo-router";
 import { useCallback } from "react";
 
 import type { AuthResponse } from "@/api/types";
-import { NotPartnerError, useSession } from "@/auth/session";
+import { EmailCodeNeededError, NotPartnerError, useSession } from "@/auth/session";
 import type { Side } from "@/auth/sides";
 
 import { keepDeviceToken } from "./device";
@@ -22,7 +22,9 @@ export type SignInOutcome =
  * Finish any sign-in answer the same way everywhere — mobile code, email and password, or a shop's
  * emailed code. A painter or a shop with its customer side switched on is asked on the website
  * which side to continue as; here the answer is always the business side, so that question is
- * passed over.
+ * passed over — and somebody whose own sign-in is a customer's, with a shop or painter work as a
+ * side, goes on into that (a shop asking for its emailed code first). Their other sides are a
+ * switch away on Me.
  */
 export function useFinishSignIn() {
   const router = useRouter();
@@ -42,6 +44,11 @@ export function useFinishSignIn() {
         return { kind: "signedIn" };
       } catch (err) {
         if (err instanceof NotPartnerError) return { kind: "refused", side: err.side };
+        // The sign-in went on into one of the person's shops, which asks for its emailed code.
+        if (err instanceof EmailCodeNeededError) {
+          router.push({ pathname: "/email-code", params: { challenge: err.challenge, hint: err.hint } });
+          return { kind: "emailCode" };
+        }
         throw err;
       }
     },

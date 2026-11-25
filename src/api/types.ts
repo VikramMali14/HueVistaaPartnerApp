@@ -8,6 +8,21 @@ export type UserRole = "ADMIN" | "DISTRIBUTOR" | "RETAILER" | "PAINTER" | "CUSTO
 export type AuthProvider = "LOCAL" | "GOOGLE" | "ACCESS_CODE";
 
 /** GET /api/auth/profile — and `user` inside every AuthResponse. */
+/** One thing a person is, that their sign-in can continue as (backend AccountSideResponse). */
+export interface AccountSide {
+  /** The account to switch to. */
+  id: string;
+  kind: "CUSTOMER" | "PAINTER" | "SHOP" | "DISTRIBUTOR" | "ADMIN";
+  role: UserRole;
+  /** The shop's or distributor's name; "Your own home" or "Painter" otherwise. */
+  label: string;
+  current: boolean;
+  /** The person's own sign-in. */
+  main: boolean;
+  /** Switching to it may ask for the shop's emailed code first. */
+  needsCode: boolean;
+}
+
 export interface UserProfile {
   id: string;
   name: string;
@@ -27,7 +42,13 @@ export interface UserProfile {
   /** A shop or a painter only: whether its customer profile is switched on. */
   customerProfileEnabled?: boolean | null;
   /** What this session can switch to right now. */
-  switchTo?: "CUSTOMER" | "SHOP" | "PAINTER" | null;
+  switchTo?: "CUSTOMER" | "SHOP" | "PAINTER" | "DISTRIBUTOR" | null;
+  /**
+   * Everything the person behind this session can continue as — their own sign-in first, then each
+   * side switched on: their own home, painter work, each shop, each distributor — the current one
+   * marked. One entry for somebody who is only one thing; absent from an older backend.
+   */
+  sides?: AccountSide[];
   /** A painter's: how many shops have them on their commission list (P19 is offered when there is one). */
   commissionShops?: number;
   /** A painter's: whether the HueVistaa team has switched their own books on (P14–P18). */

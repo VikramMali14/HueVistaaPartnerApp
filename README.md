@@ -1,7 +1,12 @@
 # HueVistaa Partner
 
 The phone app for the businesses that work with HueVistaa: **paint shops** and **painters**. There
-is one app and one sign-in, and the account decides which side opens.
+is one app and one sign-in, and the account decides which side opens. Somebody who is more than one
+of these on the same sign-in — a shop owner who also paints, a painter with a counter, an owner with
+two branches — switches between them from **Me** ("Your other work"); a shop asks for the code
+emailed to them first on a new phone. A shop owner starts their painter work there too ("Work as a
+painter too"), which keeps it apart from the shop. Somebody whose own sign-in is a customer's, with a
+shop the team added to it, goes straight into that shop.
 
 **A shop** (its owner) sees its day:
 

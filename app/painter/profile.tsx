@@ -18,6 +18,7 @@ import { openWebPage, webPages } from "@/lib/open-web";
 import { usePullToRefresh } from "@/lib/use-pull-to-refresh";
 import { useSubmit } from "@/lib/use-submit";
 import { fonts, useTheme } from "@/theme";
+import { SwitchSides } from "@/features/auth/SwitchSides";
 
 /**
  * P12 · Trade profile. Spec: docs/05-screens-painter.md — P12. Web reference:
@@ -274,6 +275,9 @@ function TradeForm({ profile, onRefresh }: { profile: PainterProfile; onRefresh:
       </ListGroup>
 
       <OwnHome />
+
+      {/* A painter's counter, or the shop of the owner whose painter work this is: a tap away. */}
+      <SwitchSides />
 
       <ListGroup>
         <ListRow icon="life-buoy" title={t("account.helpSupport")} onPress={() => void openWebPage(webPages.contact)} testID="profile-help" />
