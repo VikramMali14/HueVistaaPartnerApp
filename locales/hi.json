@@ -1,0 +1,7 @@
+{
+  "ios": {
+    "CFBundleDisplayName": "HueVistaa पार्टनर",
+    "NSCameraUsageDescription": "HueVistaa पार्टनर कैमरे से कलर बोर्ड का QR स्कैन करता है, ताकि उसके पॉइंट आपको मिलें।",
+    "NSLocationWhenInUseUsageDescription": "HueVistaa पार्टनर आपकी जगह सिर्फ़ तब पूछता है जब आप कहें: दुकान की जगह सेव करने के लिए, ताकि स्टाफ़ वहाँ हाज़िरी लगा सके, या पास के ग्राहकों के लिए आपको नक़्शे पर दिखाने के लिए।"
+  }
+}
