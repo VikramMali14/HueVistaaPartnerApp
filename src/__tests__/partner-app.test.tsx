@@ -8,7 +8,18 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { fireEvent, renderRouter, screen, waitFor, within } from "expo-router/testing-library";
 
-import type { LeaveRequest, PriceList, PriceRequest, RegisterDay, Shop, ShopAlert, ShopAlerts, StaffDay } from "@/api/endpoints/shop";
+import type {
+  AttendanceCorrection,
+  LeaveRequest,
+  PieceEntry,
+  PriceList,
+  PriceRequest,
+  RegisterDay,
+  Shop,
+  ShopAlert,
+  ShopAlerts,
+  StaffDay,
+} from "@/api/endpoints/shop";
 import { ApiError } from "@/api/errors";
 import { queryClient } from "@/api/query-client";
 import type { AuthResponse, UserProfile } from "@/api/types";
@@ -63,6 +74,12 @@ const mockShop = {
   priceList: jest.fn<Promise<PriceList>, [string]>(),
   priceRequests: jest.fn<Promise<PriceRequest[]>, [string]>(),
   answerPrice: jest.fn<Promise<PriceRequest>, [string, string, Record<string, unknown>]>(),
+  corrections: jest.fn<Promise<AttendanceCorrection[]>, [string]>(),
+  answerCorrection: jest.fn<Promise<AttendanceCorrection>, [string, string, Record<string, unknown>]>(),
+  overtime: jest.fn<Promise<StaffDay[]>, [string]>(),
+  answerOvertime: jest.fn<Promise<StaffDay>, [string, string, string, Record<string, unknown>]>(),
+  pieceJobs: jest.fn<Promise<PieceEntry[]>, [string]>(),
+  answerPieceJob: jest.fn<Promise<PieceEntry>, [string, string, Record<string, unknown>]>(),
 };
 jest.mock("@/api/endpoints/shop", () => ({
   get shopApi() {
@@ -191,6 +208,9 @@ beforeEach(async () => {
   mockShop.leave.mockResolvedValue([]);
   mockShop.priceRequests.mockResolvedValue([]);
   mockShop.priceList.mockResolvedValue(LIST);
+  mockShop.corrections.mockResolvedValue([]);
+  mockShop.overtime.mockResolvedValue([]);
+  mockShop.pieceJobs.mockResolvedValue([]);
 });
 
 afterEach(() => setLanguage("en"));
@@ -437,6 +457,28 @@ describe("the register", () => {
     await waitFor(() => expect(screen.getByTestId("place-pl1")).toBeTruthy());
   });
 
+  it("on a machine shop shows the punches, and no places to save", async () => {
+    mockShop.register.mockResolvedValue(
+      registerDay(
+        [
+          staffDay("s1", "Suresh", { status: "PRESENT", checkedInAt: `${TODAY}T09:58:00`, location: "MACHINE", placeName: "Counter machine" }),
+          staffDay("s2", "Mohan", { status: "HALF_PAID_LEAVE", markedBy: "SHOP" }),
+        ],
+        { attendanceMethod: "MACHINE", hasMachine: true },
+      ),
+    );
+    renderRouter("./app", { initialUrl: "/shop/staff" });
+    await waitFor(() => expect(screen.getByTestId("staff-s1")).toBeTruthy());
+    expect(within(screen.getByTestId("staff-s1")).getByText("In 9:58 am · Punched on Counter machine")).toBeTruthy();
+    expect(screen.getByTestId("status-s2")).toHaveTextContent("Half day + paid leave");
+    expect(screen.getByTestId("register-machine")).toBeTruthy();
+    expect(screen.queryByTestId("place-save")).toBeNull();
+
+    // The machine and the shop's rules are set up on the website.
+    fireEvent.press(screen.getByTestId("website-rules"));
+    await waitFor(() => expect(mockBrowser.openBrowserAsync).toHaveBeenCalledWith(expect.stringMatching(/\/staff\/attendance$/), expect.anything()));
+  });
+
   it("saves no place when the phone can't say where it is", async () => {
     mockLocation.getForegroundPermissionsAsync.mockResolvedValue({ granted: false });
     mockLocation.requestForegroundPermissionsAsync.mockResolvedValue({ granted: false });
@@ -500,6 +542,84 @@ describe("asks", () => {
 
     await waitFor(() => expect(mockShop.answerLeave).toHaveBeenCalledWith("o1", "l1", { action: "REFUSE", reply: "Diwali week" }));
     await waitFor(() => expect(within(screen.getByTestId("leave-l1")).getByText("Refused")).toBeTruthy());
+  });
+
+  it("approves leave by the shop's own rule, saying what is left", async () => {
+    mockShop.leave.mockResolvedValue([{ ...LEAVE, leaveLeftDays: 1.5 }]);
+    mockShop.answerLeave.mockResolvedValue({ ...LEAVE, status: "APPROVED", paid: true, paidHalves: 3, unpaidHalves: 3 });
+    renderRouter("./app", { initialUrl: "/shop/asks?tab=leave" });
+
+    await waitFor(() => expect(screen.getByTestId("approve-rule-l1")).toBeTruthy());
+    expect(screen.getByText("Suresh has 1½ days of paid leave left that month.")).toBeTruthy();
+    fireEvent.press(screen.getByTestId("approve-rule-l1"));
+
+    await waitFor(() => expect(mockShop.answerLeave).toHaveBeenCalledWith("o1", "l1", { action: "APPROVE" }));
+    await waitFor(() =>
+      expect(within(screen.getByTestId("leave-l1")).getByText("Approved — 1½ days paid, 1½ days without pay")).toBeTruthy(),
+    );
+  });
+
+  it("shows half a day's leave as the half it is", async () => {
+    mockShop.leave.mockResolvedValue([{ ...LEAVE, toDay: LEAVE.fromDay, days: 1, portion: "SECOND_HALF" }]);
+    renderRouter("./app", { initialUrl: "/shop/asks?tab=leave" });
+    await waitFor(() => expect(screen.getByTestId("leave-l1")).toBeTruthy());
+    expect(within(screen.getByTestId("leave-l1")).getByText(/second half off$/)).toBeTruthy();
+  });
+
+  it("answers a day to put right, overtime and piece work", async () => {
+    const FIX: AttendanceCorrection = {
+      id: "c1",
+      orgId: "o1",
+      staffId: "s2",
+      staffName: "Mohan",
+      kind: "CORRECTION",
+      day: addDays(TODAY, -1),
+      inTime: "10:00",
+      outTime: "20:00",
+      reason: "Forgot to punch",
+      status: "OPEN",
+    };
+    const OVERTIME = staffDay("s1", "Suresh", { date: addDays(TODAY, -1), status: "PRESENT", overtimeMinutes: 90, overtimeStatus: "PENDING" });
+    const JOB: PieceEntry = {
+      id: "j1",
+      orgId: "o1",
+      workDay: TODAY,
+      status: "OPEN",
+      split: "EQUAL",
+      totalPaise: 15000,
+      lines: [{ itemName: "Paint box", quantity: 50, amountPaise: 15000 }],
+      shares: [{ staffId: "s2", name: "Mohan", sharePaise: 15000 }],
+      createdByName: "Mohan",
+      byStaff: true,
+      createdByStaffId: "s2",
+    };
+    mockShop.alerts.mockResolvedValue({ total: 3, shops: [alertFor({ correctionsWaiting: 1, overtimeWaiting: 1, pieceWorkWaiting: 1 })] });
+    mockShop.corrections.mockResolvedValue([FIX]);
+    mockShop.overtime.mockResolvedValue([OVERTIME]);
+    mockShop.pieceJobs.mockResolvedValue([JOB]);
+    mockShop.answerCorrection.mockResolvedValue({ ...FIX, status: "APPROVED" });
+    mockShop.answerOvertime.mockResolvedValue({ ...OVERTIME, overtimeStatus: "APPROVED" });
+    mockShop.answerPieceJob.mockResolvedValue({ ...JOB, status: "APPROVED" });
+    renderRouter("./app", { initialUrl: "/shop/asks?tab=attendance" });
+
+    await waitFor(() => expect(screen.getByTestId("fix-c1")).toBeTruthy());
+    expect(within(screen.getByTestId("fix-c1")).getByText("In 10:00 · Out 20:00")).toBeTruthy();
+    fireEvent.press(screen.getByTestId("fix-approve-c1"));
+    await waitFor(() => expect(mockShop.answerCorrection).toHaveBeenCalledWith("o1", "c1", { action: "APPROVE" }));
+    await waitFor(() => expect(screen.queryByTestId("fix-c1")).toBeNull());
+
+    // An hour and a half: OK an hour of it.
+    const id = `s1:${addDays(TODAY, -1)}`;
+    fireEvent.press(within(screen.getByTestId(`overtime-steps-${id}`)).getByLabelText("−30 min"));
+    fireEvent.press(screen.getByTestId(`overtime-approve-${id}`));
+    await waitFor(() => expect(mockShop.answerOvertime).toHaveBeenCalledWith("o1", "s1", addDays(TODAY, -1), { approve: true, minutes: 60 }));
+    await waitFor(() => expect(screen.queryByTestId(`overtime-${id}`)).toBeNull());
+
+    expect(screen.getByText("Approve · ₹150")).toBeTruthy();
+    fireEvent.press(screen.getByTestId("piece-approve-j1"));
+    await waitFor(() => expect(mockShop.answerPieceJob).toHaveBeenCalledWith("o1", "j1", { action: "APPROVE" }));
+    // Everything answered: nothing is left waiting.
+    await waitFor(() => expect(screen.getByText("Nothing to answer. Days to put right, overtime and piece work show here.")).toBeTruthy());
   });
 
   it("says when nothing has been asked", async () => {

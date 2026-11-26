@@ -1,4 +1,4 @@
-import type { AttendanceStatus, LeaveRequest, StaffDay } from "@/api/endpoints/shop";
+import type { AttendanceCorrection, AttendanceStatus, LeaveRequest, StaffDay } from "@/api/endpoints/shop";
 import { t, type MessageKey } from "@/i18n";
 import { istHour, monthName, serverMoment } from "@/lib/dates";
 import { formatRupees } from "@/lib/money";
@@ -12,6 +12,7 @@ const STATUS: Record<AttendanceStatus, MessageKey> = {
   HALF_DAY: "status.halfDay",
   ABSENT: "status.absent",
   PAID_LEAVE: "status.paidLeave",
+  HALF_PAID_LEAVE: "status.halfPaidLeave",
   WEEK_OFF: "status.weekOff",
   HOLIDAY: "status.holiday",
 };
@@ -142,6 +143,10 @@ export function whereLabel(day: Pick<StaffDay, "location" | "placeName" | "dista
     }
     case "NOT_SHARED":
       return t("where.notShared");
+    case "MACHINE":
+      return day.placeName?.trim() ? t("where.machine", { machine: day.placeName.trim() }) : t("where.machineUnnamed");
+    case "REQUEST":
+      return t("where.request");
     default:
       return null;
   }
@@ -164,11 +169,17 @@ export function leaveRange(leave: Pick<LeaveRequest, "fromDay" | "toDay">): stri
 }
 
 /** Where an ask for leave stands, in a few words. */
-export function leaveStatus(leave: Pick<LeaveRequest, "status" | "paid">): string {
+export function leaveStatus(leave: Pick<LeaveRequest, "status" | "paid" | "paidHalves" | "unpaidHalves">): string {
   switch (leave.status) {
     case "OPEN":
       return t("shop.asks.waiting");
     case "APPROVED":
+      if ((leave.paidHalves ?? 0) > 0 && (leave.unpaidHalves ?? 0) > 0) {
+        return t("shop.asks.leaveApprovedSplit", {
+          paid: daysWords((leave.paidHalves ?? 0) / 2),
+          unpaid: daysWords((leave.unpaidHalves ?? 0) / 2),
+        });
+      }
       return leave.paid === false ? t("shop.asks.leaveApprovedUnpaid") : t("shop.asks.leaveApprovedPaid");
     case "REFUSED":
       return t("shop.asks.leaveRefused");
@@ -177,3 +188,36 @@ export function leaveStatus(leave: Pick<LeaveRequest, "status" | "paid">): strin
   }
 }
 
+
+/** "½ day", "1 day", "1½ days", "3 days" — days of leave, in halves. */
+export function daysWords(days: number): string {
+  const halves = Math.round(days * 2);
+  if (halves === 1) return t("shop.asks.halfDayWord");
+  if (halves % 2 === 1) return t("shop.asks.daysAndHalf", { n: (halves - 1) / 2 });
+  const whole = halves / 2;
+  return whole === 1 ? t("shop.asks.oneDayWord") : t("shop.asks.daysWord", { n: whole });
+}
+
+/** An ask for leave's days with the half it is: "24 Nov", "24 Nov – 26 Nov", "24 Nov · first half off". */
+export function leaveWhen(leave: Pick<LeaveRequest, "fromDay" | "toDay" | "portion">): string {
+  if (leave.portion === "FIRST_HALF") return t("shop.asks.leaveFirstHalfOff", { day: shortDay(leave.fromDay) });
+  if (leave.portion === "SECOND_HALF") return t("shop.asks.leaveSecondHalfOff", { day: shortDay(leave.fromDay) });
+  return leaveRange(leave);
+}
+
+/** "2 h 30 min", "1 h", "30 min" — overtime. */
+export function hoursLabel(minutes: number | null | undefined): string {
+  const total = Math.max(0, Math.round(minutes ?? 0));
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  if (h === 0) return t("shop.asks.minutesOnly", { m });
+  return m === 0 ? t("shop.asks.hoursOnly", { h }) : t("shop.asks.hours", { h, m });
+}
+
+/** "In 10:00 · Out 20:00" — the times a request to put a day right gives. */
+export function correctionTimes(c: Pick<AttendanceCorrection, "inTime" | "outTime">): string {
+  const parts: string[] = [];
+  if (c.inTime) parts.push(t("shop.asks.fixIn", { time: c.inTime }));
+  if (c.outTime) parts.push(t("shop.asks.fixOutTime", { time: c.outTime }));
+  return parts.join(" · ");
+}
