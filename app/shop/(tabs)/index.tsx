@@ -91,10 +91,13 @@ export default function ShopToday() {
   );
 }
 
-/** The price questions and asks for leave waiting, each a tap from its answer — or "nothing waiting". */
-function NeedsYou({ alert, onOpen }: { alert: ShopAlert; onOpen: (tab: "prices" | "leave") => void }) {
+/**
+ * The price questions, asks for leave and attendance requests (days to put right, overtime, piece
+ * work) waiting, each a tap from its answer — or "nothing waiting".
+ */
+function NeedsYou({ alert, onOpen }: { alert: ShopAlert; onOpen: (tab: "prices" | "leave" | "attendance") => void }) {
   const { colors, radius } = useTheme();
-  const items: { key: "prices" | "leave"; icon: Icon; title: string; line: string | null }[] = [];
+  const items: { key: "prices" | "leave" | "attendance"; icon: Icon; title: string; line: string | null }[] = [];
   if (alert.openRequests > 0) {
     items.push({
       key: "prices",
@@ -109,6 +112,15 @@ function NeedsYou({ alert, onOpen }: { alert: ShopAlert; onOpen: (tab: "prices" 
       icon: "sun",
       title: alert.leaveRequestsWaiting === 1 ? t("shop.today.leaveOne") : t("shop.today.leave", { n: alert.leaveRequestsWaiting }),
       line: newestLine(alert.newestLeaveRequest),
+    });
+  }
+  const attendance = (alert.correctionsWaiting ?? 0) + (alert.overtimeWaiting ?? 0) + (alert.pieceWorkWaiting ?? 0);
+  if (attendance > 0) {
+    items.push({
+      key: "attendance",
+      icon: "clock",
+      title: attendance === 1 ? t("shop.today.attendanceOne") : t("shop.today.attendance", { n: attendance }),
+      line: newestLine(alert.newestCorrection),
     });
   }
   if (items.length === 0) {

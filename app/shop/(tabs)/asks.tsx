@@ -6,6 +6,7 @@ import { StyleSheet, View } from "react-native";
 
 import { messageFor } from "@/api/errors";
 import { shopApi, type LeaveRequest, type PriceRequest } from "@/api/endpoints/shop";
+import { AttendanceAsks } from "@/features/shop/AttendanceAsks";
 import { keys } from "@/api/query-keys";
 import {
   Button,
@@ -25,14 +26,14 @@ import { useShop } from "@/features/shop/ShopContext";
 import { ShopGate } from "@/features/shop/ShopGate";
 import { ShopHeader } from "@/features/shop/ShopHeader";
 import { useShopLeave, useShopPriceRequests } from "@/features/shop/use-shop";
-import { leaveRange, leaveStatus } from "@/features/shop/words";
+import { daysWords, leaveStatus, leaveWhen } from "@/features/shop/words";
 import { t } from "@/i18n";
 import { formatServerDateTime } from "@/lib/dates";
 import { buzz } from "@/lib/haptics";
 import { usePullToRefresh } from "@/lib/use-pull-to-refresh";
 import { hairline, useTheme } from "@/theme";
 
-type Tab = "prices" | "leave";
+type Tab = "prices" | "leave" | "attendance";
 
 const LEAVE_TONE: Record<LeaveRequest["status"], PillTone> = {
   OPEN: "warning",
@@ -43,21 +44,23 @@ const LEAVE_TONE: Record<LeaveRequest["status"], PillTone> = {
 
 /**
  * What the staff ask of the owner, answered on the spot: a price they need for a customer (a line
- * of reply reaches them in the HueVistaa Staff app), and days off (approved paid or without pay,
- * or refused with a word). Waiting first; answered below, for a while. The website's price
- * requests and leave pages, on the phone.
+ * of reply reaches them in the HueVistaa Staff app), days off (approved paid, without pay, or by the
+ * shop's own rule — or refused with a word), and the rest about their days: a day to put right,
+ * overtime to OK, piece work a helper wrote down. Waiting first; answered below, for a while. The
+ * website's price requests, leave and requests pages, on the phone.
  */
 export default function ShopAsks() {
   const { space } = useTheme();
   const params = useLocalSearchParams<{ tab?: string }>();
   const { shop, alert } = useShop();
-  const [tab, setTab] = useState<Tab>(params.tab === "leave" ? "leave" : "prices");
+  const [tab, setTab] = useState<Tab>(params.tab === "leave" ? "leave" : params.tab === "attendance" ? "attendance" : "prices");
   const requests = useShopPriceRequests(shop?.id);
   const leave = useShopLeave(shop?.id);
   const pull = usePullToRefresh(() => Promise.all([requests.refetch(), leave.refetch()]));
 
   const openQuestions = (requests.data ?? []).filter((r) => r.status === "OPEN").length || alert?.openRequests || 0;
   const openLeave = (leave.data ?? []).filter((l) => l.status === "OPEN").length || alert?.leaveRequestsWaiting || 0;
+  const openAttendance = (alert?.correctionsWaiting ?? 0) + (alert?.overtimeWaiting ?? 0) + (alert?.pieceWorkWaiting ?? 0);
 
   return (
     <Screen scroll edges={["top"]} onRefresh={pull.onRefresh} refreshing={pull.refreshing} contentStyle={{ gap: space.lg, paddingBottom: space.xxl }}>
@@ -69,6 +72,10 @@ export default function ShopAsks() {
               options={[
                 { value: "prices", label: openQuestions ? `${t("shop.asks.prices")} · ${openQuestions}` : t("shop.asks.prices") },
                 { value: "leave", label: openLeave ? `${t("shop.asks.leave")} · ${openLeave}` : t("shop.asks.leave") },
+                {
+                  value: "attendance",
+                  label: openAttendance ? `${t("shop.asks.attendance")} · ${openAttendance}` : t("shop.asks.attendance"),
+                },
               ]}
               value={tab}
               onChange={(next) => {
@@ -78,7 +85,13 @@ export default function ShopAsks() {
               accessibilityLabel={t("shop.asks.title")}
               compact
             />
-            {tab === "prices" ? <PriceQuestions orgId={current.id} query={requests} /> : <LeaveAsks orgId={current.id} query={leave} />}
+            {tab === "prices" ? (
+              <PriceQuestions orgId={current.id} query={requests} />
+            ) : tab === "leave" ? (
+              <LeaveAsks orgId={current.id} query={leave} />
+            ) : (
+              <AttendanceAsks orgId={current.id} />
+            )}
           </>
         )}
       </ShopGate>
@@ -207,6 +220,7 @@ function LeaveAsks({ orgId, query }: { orgId: string; query: ReturnType<typeof u
   const open = query.data.filter((l) => l.status === "OPEN");
   const decided = query.data.filter((l) => l.status !== "OPEN");
 
+  /** `paid` left out with APPROVE goes by the shop's rule: paid as far as the leave left covers. */
   const answer = async (ask: LeaveRequest, action: "APPROVE" | "REFUSE", paid?: boolean, words?: string) => {
     setBusy(ask.id);
     try {
@@ -230,7 +244,11 @@ function LeaveAsks({ orgId, query }: { orgId: string; query: ReturnType<typeof u
   };
 
   const days = (l: LeaveRequest) =>
-    l.days === 1 ? t("shop.asks.leaveOneDay", { range: leaveRange(l) }) : t("shop.asks.leaveDays", { range: leaveRange(l), n: l.days });
+    l.portion && l.portion !== "FULL"
+      ? leaveWhen(l)
+      : l.days === 1
+        ? t("shop.asks.leaveOneDay", { range: leaveWhen(l) })
+        : t("shop.asks.leaveDays", { range: leaveWhen(l), n: l.days });
 
   return (
     <View style={{ gap: space.sm }} testID="leave-asks">
@@ -246,11 +264,27 @@ function LeaveAsks({ orgId, query }: { orgId: string; query: ReturnType<typeof u
               {l.reason}
             </Text>
           ) : null}
+          {l.leaveLeftDays != null ? (
+            <Text variant="small" tone="mute" testID={`leave-left-${l.id}`}>
+              {t("shop.asks.leftThatMonth", { name: l.staffName, days: daysWords(l.leaveLeftDays) })}
+            </Text>
+          ) : null}
           <View style={{ gap: space.xs }}>
+            {l.leaveLeftDays != null ? (
+              <Button
+                icon="check"
+                label={t("shop.asks.approveByRule")}
+                loading={busy === l.id}
+                disabled={busy !== null}
+                onPress={() => void answer(l, "APPROVE")}
+                testID={`approve-rule-${l.id}`}
+              />
+            ) : null}
             <Button
-              icon="check"
+              variant={l.leaveLeftDays != null ? "secondary" : undefined}
+              icon={l.leaveLeftDays != null ? undefined : "check"}
               label={t("shop.asks.approvePaid")}
-              loading={busy === l.id}
+              loading={l.leaveLeftDays == null && busy === l.id}
               disabled={busy !== null}
               onPress={() => void answer(l, "APPROVE", true)}
               testID={`approve-paid-${l.id}`}

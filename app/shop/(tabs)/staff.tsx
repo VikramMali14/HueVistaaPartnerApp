@@ -12,6 +12,8 @@ import {
   EmptyState,
   ErrorState,
   IconButton,
+  ListGroup,
+  ListRow,
   Pill,
   type PillTone,
   PressableScale,
@@ -38,15 +40,18 @@ const TONE: Record<AttendanceStatus, PillTone> = {
   HALF_DAY: "accent",
   ABSENT: "danger",
   PAID_LEAVE: "plain",
+  HALF_PAID_LEAVE: "plain",
   WEEK_OFF: "plain",
   HOLIDAY: "plain",
 };
 
 /**
- * The register, for one day: everybody, with how their day stands — marked in from where, at what
- * time, late or not — and the owner's mark on it, a tap away. Everybody not marked yet can be
- * marked present at once. Under it, the places staff mark in from, saved from where the owner
- * stands. The website's attendance page, on the phone (HueVistaFrontEnd app/(app)/attendance).
+ * The register, for one day: everybody, with how their day stands — marked in from where (the
+ * phone, the shop's fingerprint machine, or a request the owner OKed), at what time, late or not —
+ * and the owner's mark on it, a tap away. Everybody not marked yet can be marked present at once.
+ * Under it, the places staff mark in from, saved from where the owner stands (not on a shop that
+ * marks on its machine), and the setup that lives on the website: the machine and the shop's rules,
+ * salary, and piece-work rates. The website's attendance page, on the phone.
  */
 export default function ShopStaff() {
   const { space } = useTheme();
@@ -137,6 +142,12 @@ export default function ShopStaff() {
                 </View>
               ) : (
                 <View style={{ gap: space.sm }}>
+                  {data.holiday ? <Pill label={t("shop.register.holiday", { name: data.holiday })} tone="accent" testID="register-holiday" /> : null}
+                  {data.attendanceMethod === "MACHINE" ? (
+                    <Text variant="small" tone="mute" testID="register-machine">
+                      {t("shop.register.machineNote")}
+                    </Text>
+                  ) : null}
                   <Text variant="small" tone="mute">
                     {data.unmarkedPresent ? t("shop.register.unmarkedPresent") : t("shop.register.unmarkedAbsent")}
                   </Text>
@@ -148,7 +159,14 @@ export default function ShopStaff() {
                   ))}
                 </View>
               )}
-              <PlacesCard orgId={current.id} places={data.places} onSaved={(places: Place[]) => put({ ...data, places })} />
+              {data.attendanceMethod !== "MACHINE" ? (
+                <PlacesCard orgId={current.id} places={data.places} onSaved={(places: Place[]) => put({ ...data, places })} />
+              ) : null}
+              <ListGroup title={t("shop.register.onWebsite")}>
+                <ListRow icon="settings" title={t("shop.register.rulesLink")} onPress={() => void openWebPage(webPages.shopAttendance)} testID="website-rules" />
+                <ListRow icon="credit-card" title={t("shop.register.salaryLink")} onPress={() => void openWebPage(webPages.shopSalary)} testID="website-salary" />
+                <ListRow icon="package" title={t("shop.register.pieceLink")} onPress={() => void openWebPage(webPages.shopPieceWork)} testID="website-piece" />
+              </ListGroup>
             </>
           );
         }}
@@ -168,6 +186,7 @@ function StaffRow({ day, onPress }: { day: StaffDay; onPress: () => void }) {
     inAt ? t("shop.register.in", { time: inAt }) : null,
     outAt ? t("shop.register.out", { time: outAt }) : null,
     day.late && day.lateMinutes ? t("shop.register.late", { n: day.lateMinutes }) : null,
+    day.missedOut ? t("shop.register.missedOut") : null,
     where,
   ].filter(Boolean) as string[];
   const label = day.status ? statusLabel(day.status) : t("shop.register.notMarked");

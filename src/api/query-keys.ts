@@ -12,6 +12,9 @@ export const keys = {
   /** One day of a shop's register. Under the shop, so a mark reaches the day and the alerts' counts. */
   register: (orgId: string, date: string) => ["shop", orgId, "register", date] as const,
   shopLeave: (orgId: string) => ["shop", orgId, "leave"] as const,
+  shopCorrections: (orgId: string) => ["shop", orgId, "corrections"] as const,
+  shopOvertime: (orgId: string) => ["shop", orgId, "overtime"] as const,
+  shopPieceWork: (orgId: string) => ["shop", orgId, "piece-work"] as const,
   shopStaff: (orgId: string) => ["shop", orgId, "staff"] as const,
   priceList: (orgId: string) => ["shop", orgId, "price-list"] as const,
   priceRequests: (orgId: string) => ["shop", orgId, "price-requests"] as const,

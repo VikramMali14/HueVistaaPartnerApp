@@ -8,11 +8,11 @@ import { useTheme } from "@/theme";
 import { dayLabel, statusLabel, timeLabel, whereLabel } from "./words";
 
 /** What an owner can set a day to, in the register's order. */
-export const STATUSES: AttendanceStatus[] = ["PRESENT", "HALF_DAY", "ABSENT", "PAID_LEAVE", "WEEK_OFF", "HOLIDAY"];
+export const STATUSES: AttendanceStatus[] = ["PRESENT", "HALF_DAY", "ABSENT", "PAID_LEAVE", "HALF_PAID_LEAVE", "WEEK_OFF", "HOLIDAY"];
 
 /**
  * One person's day, opened from the register: how it stands (when they came, from where, what they
- * wrote) and the six marks an owner can give it. A mark is set at once — no asking the employee —
+ * wrote) and the marks an owner can give it. A mark is set at once — no asking the employee —
  * and a day they didn't mark in on can be cleared again.
  */
 export function MarkSheet({

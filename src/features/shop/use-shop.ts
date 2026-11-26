@@ -30,6 +30,21 @@ export function useShopLeave(orgId: string | undefined) {
   return useQuery({ queryKey: keys.shopLeave(orgId ?? ""), queryFn: () => shopApi.leave(orgId!), enabled: Boolean(orgId) });
 }
 
+/** Requests to put a day right, waiting first. */
+export function useShopCorrections(orgId: string | undefined) {
+  return useQuery({ queryKey: keys.shopCorrections(orgId ?? ""), queryFn: () => shopApi.corrections(orgId!), enabled: Boolean(orgId) });
+}
+
+/** Days of overtime waiting for the owner's OK. */
+export function useShopOvertime(orgId: string | undefined) {
+  return useQuery({ queryKey: keys.shopOvertime(orgId ?? ""), queryFn: () => shopApi.overtime(orgId!), enabled: Boolean(orgId) });
+}
+
+/** Piece work: this month's jobs, and every one waiting. */
+export function useShopPieceWork(orgId: string | undefined) {
+  return useQuery({ queryKey: keys.shopPieceWork(orgId ?? ""), queryFn: () => shopApi.pieceJobs(orgId!), enabled: Boolean(orgId) });
+}
+
 /** The shop's price list, as its owner sees it — the lowest prices included. Memory only. */
 export function useShopPriceList(orgId: string | undefined) {
   return useQuery({ queryKey: keys.priceList(orgId ?? ""), queryFn: () => shopApi.priceList(orgId!), enabled: Boolean(orgId) });

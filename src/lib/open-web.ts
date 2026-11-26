@@ -12,6 +12,10 @@ export const webPages = {
   /** The shop's pages, on the partner site where shops sign in. */
   shopDashboard: `${env.partnerOrigin}/dashboard`,
   shopStaff: `${env.partnerOrigin}/staff`,
+  /** The register's settings: the fingerprint machine, the shop's rules, holidays and places. */
+  shopAttendance: `${env.partnerOrigin}/staff/attendance`,
+  shopSalary: `${env.partnerOrigin}/staff/salary`,
+  shopPieceWork: `${env.partnerOrigin}/staff/piece-work`,
   shopPriceList: `${env.partnerOrigin}/price-list`,
   shopApprovals: `${env.partnerOrigin}/approvals`,
   shopCommission: `${env.partnerOrigin}/commission`,
